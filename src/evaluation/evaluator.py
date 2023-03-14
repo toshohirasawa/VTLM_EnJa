@@ -399,7 +399,7 @@ class Evaluator(object):
                 langs = sent1.clone().fill_(lang1_id) if params.n_langs > 1 else None
                 x, lengths = sent1, len1
             else:
-                _, (sent1, len1), (sent2, len2) = batch
+                (sent1, len1), (sent2, len2), _ = batch
                 x, lengths, positions, langs = concat_batches(
                     sent1, len1, lang1_id, sent2, len2, lang2_id,
                     params.pad_index, params.eos_index, reset_positions=True)
@@ -472,7 +472,7 @@ class Evaluator(object):
         for batch in self.get_iterator_vlm(data_set, lang1, lang2, stream=(lang2 is None)):
             if lang2 is not None:
                 # vTLM
-                _, (img_boxes, img_feats, img_labels), (x1, len1), (x2, len2) = batch
+                (x1, len1), (x2, len2), (img_boxes, img_feats, img_labels), _  = batch
                 image_langs = torch.empty((params.num_of_regions, len1.size(0))).long().fill_(img_id)
                 x, lengths, positions, langs = concat_batches(
                     x1, len1, lang1_id, x2, len2, lang2_id, params.pad_index,
@@ -593,7 +593,7 @@ class EncDecEvaluator(Evaluator):
 
         for batch in self.get_iterator(data_set, lang1, lang2):
             # generate batch
-            _, (img_boxes, img_feats, img_labels), (x1, len1), (x2, len2) = batch
+            (x1, len1), (x2, len2), (img_boxes, img_feats, img_labels), _ = batch
             langs1 = x1.clone().fill_(lang1_id)
             langs2 = x2.clone().fill_(lang2_id)
             img_langs = torch.empty((params.num_of_regions, langs1.size(1))).long().fill_(img_id)
@@ -710,7 +710,7 @@ class EncDecEvaluator(Evaluator):
         for batch in self.get_iterator(data_set, lang1, lang2):
 
             # generate batch
-            _, (x1, len1), (x2, len2) = batch
+            (x1, len1), (x2, len2), _ = batch
             langs1 = x1.clone().fill_(lang1_id)
             langs2 = x2.clone().fill_(lang2_id)
 

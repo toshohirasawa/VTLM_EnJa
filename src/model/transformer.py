@@ -262,7 +262,7 @@ class Projector(nn.Module):
     def __init__(self, params):
         super().__init__()
         self.relu = getattr(params, 'visual_relu', True)
-        self.linear = nn.Linear(1536, params.emb_dim)
+        self.linear = nn.Linear(2048, params.emb_dim)
 
     def forward(self, x):
         x = self.linear(x.view(x.size(0), x.size(1), -1))

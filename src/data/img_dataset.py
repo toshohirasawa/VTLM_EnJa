@@ -14,19 +14,29 @@ logger = getLogger()
 def load_images(sentence_ids, feat_path, img_names, n_regions):
     img_scores, img_boxes, img_feats, img_labels = [], [], [], []
 
-    for idx in sentence_ids:
+    has_vision_feats = [True for _ in sentence_ids]
+    for i, idx in enumerate(sentence_ids):
         # Everything should be loadable. If features do not exist
         # use the dummy empty_feats.pkl
         f_name = os.path.join(feat_path, img_names[idx])
-        with open(f_name, "rb") as f:
-            x = pickle.load(f)
-            assert len(x) != 0 and len(x["detection_scores"]) == 36
+        if os.path.exists(f_name):
+            with open(f_name, "rb") as f:
+                x = pickle.load(f)
+                assert len(x) != 0 and len(x["detection_scores"]) == 36
 
-            # reduce to requested # of regions
-            img_scores.append(x['detection_scores'][:n_regions].squeeze())
-            img_boxes.append(x['detection_boxes'][:n_regions].squeeze())
-            img_feats.append(x['detection_features'][:n_regions].squeeze())
-            img_labels.append(x['detection_classes'][:n_regions].squeeze())
+                # reduce to requested # of regions
+                img_scores.append(x['detection_scores'][:n_regions].squeeze().astype(np.float32))
+                img_boxes.append(x['detection_boxes'][:n_regions].squeeze().astype(np.float32))
+                img_feats.append(x['detection_features'][:n_regions].squeeze().astype(np.float32))
+                img_labels.append(x['detection_classes'][:n_regions].squeeze())
+        else:
+            # missing images; pad an empty feature
+            img_scores.append(np.zeros([36, 1601], dtype=np.float32))
+            img_boxes.append(np.zeros([36, 4], dtype=np.float32))
+            img_feats.append(np.zeros([36, 2048], dtype=np.float32))
+            img_labels.append(np.zeros([36], dtype=np.int64))
+            has_vision_feats[i] = False
+
 
     # convert to numpy arrays
     # detection_scores is not used anywhere so we don't return it
@@ -36,8 +46,10 @@ def load_images(sentence_ids, feat_path, img_names, n_regions):
         np.array(img_feats, dtype=img_feats[0].dtype))
     img_labels = torch.from_numpy(
         np.array(img_labels, dtype='int64'))
+    has_vision_feats = torch.from_numpy(
+        np.array(has_vision_feats, dtype='bool'))
 
-    return img_boxes, img_feats, img_labels
+    return img_boxes, img_feats, img_labels, has_vision_feats
 
 
 class DatasetWithRegions(Dataset):
@@ -64,6 +76,19 @@ class DatasetWithRegions(Dataset):
 
         # sanity checks
         self.check()
+
+    def remove_empty_sentences(self):
+        """
+        Remove empty sentences.
+        """
+        init_size = len(self.pos)
+        indices = np.arange(len(self.pos))
+        indices = indices[self.lengths[indices] > 0]
+        self.pos = self.pos[indices]
+        self.lengths = self.pos[:, 1] - self.pos[:, 0]
+        logger.info("Removed %i empty sentences." % (init_size - len(indices)))
+        self.check()
+        return indices
 
     def remove_long_sentences(self, max_len):
         indices = super().remove_long_sentences(max_len)
@@ -117,6 +142,22 @@ class ParallelDatasetWithRegions(ParallelDataset):
         # sanity checks
         self.check()
 
+    def remove_empty_sentences(self):
+        """
+        Remove empty sentences.
+        """
+        init_size = len(self.pos1)
+        indices = np.arange(len(self.pos1))
+        indices = indices[self.lengths1[indices] > 0]
+        indices = indices[self.lengths2[indices] > 0]
+        self.pos1 = self.pos1[indices]
+        self.pos2 = self.pos2[indices]
+        self.lengths1 = self.pos1[:, 1] - self.pos1[:, 0]
+        self.lengths2 = self.pos2[:, 1] - self.pos2[:, 0]
+        logger.info("Removed %i empty sentences." % (init_size - len(indices)))
+        self.check()
+        return indices
+
     def remove_long_sentences(self, max_len):
         indices = super().remove_long_sentences(max_len)
         self.image_names = self.image_names[indices]
@@ -143,6 +184,23 @@ class ParallelDatasetWithRegions(ParallelDataset):
             sent2 = self.batch_sentences([self.sent2[a:b] for a, b in pos2])
 
             # Visual features as separate tensors
-            img_boxes, img_feats, img_labels = self.load_images(sentence_ids)
+            img_boxes, img_feats, img_labels, has_img_feats = self.load_images(sentence_ids)
+
+            # remove samples having no image features
+            if (~has_img_feats).sum() > 0:
+                sent1 = (
+                    sent1[0].transpose(0, 1)[has_img_feats].transpose(0,1),
+                    sent1[1][has_img_feats]
+                )
+                sent2 = (
+                    sent2[0].transpose(0, 1)[has_img_feats].transpose(0,1),
+                    sent2[1][has_img_feats]
+                )
+                img_boxes = img_boxes[has_img_feats]
+                img_feats = img_feats[has_img_feats]
+                img_labels = img_labels[has_img_feats]
+                sentence_ids = sentence_ids[has_img_feats]
+
+                #TODO: shrink batch to fit the constrain between batch size and lengths
 
             yield (sent1, sent2, (img_boxes, img_feats, img_labels), sentence_ids)

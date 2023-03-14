@@ -223,7 +223,7 @@ def concat_batches(x1, len1, lang1_id, x2, len2, lang2_id, pad_idx, eos_idx, res
     slen, bs = lengths.max().item(), lengths.size(0)
 
     x = x1.new(slen, bs).fill_(pad_idx)
-    x[:len1.max().item()].copy_(x1)
+    x[:len1.max().item()].copy_(x1[:len1.max().item()])
     positions = torch.arange(slen)[:, None].repeat(1, bs).to(x1.device)
     langs = x1.new(slen, bs).fill_(lang1_id)
 

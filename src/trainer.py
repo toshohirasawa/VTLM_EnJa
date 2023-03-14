@@ -368,7 +368,7 @@ class Trainer(object):
                 )
         else:
             assert stream is False
-            _lang1, _lang2 = (lang1, lang2) if lang1 < lang2 else (lang2, lang1)
+            _lang1, _lang2 = (lang1, lang2)
 
             iterator = self.data['vpara'][(_lang1, _lang2)]['train'].get_iterator(
                 shuffle=True,
@@ -395,7 +395,7 @@ class Trainer(object):
         except StopIteration:
             iterator = self.get_iterator(iter_name, lang1, lang2, stream)
             x = next(iterator)
-        return x if lang2 is None or lang1 < lang2 else x[::-1]
+        return x
 
     def get_batch_vpara(self, iter_name, lang1, lang2=None, stream=False):
         """
@@ -412,7 +412,8 @@ class Trainer(object):
         except StopIteration:
             iterator = self.get_iterator_vpara(iter_name, lang1, lang2, stream)
             x = next(iterator)
-        return x if lang2 is None or lang1 < lang2 else x[::-1]
+
+        return x
 
     def word_shuffle(self, x, ll):
         """
@@ -621,7 +622,7 @@ class Trainer(object):
                 x1, len1, lang1_id, x2, len2, lang2_id, params.pad_index,
                 params.eos_index, reset_positions=False)
         else:
-            _, (x1, len1), (x2, len2) = self.get_batch(name, lang1, lang2)
+            (x1, len1), (x2, len2), _ = self.get_batch(name, lang1, lang2)
             x, lengths, positions, langs = concat_batches(
                 x1, len1, lang1_id, x2, len2, lang2_id, params.pad_index,
                 params.eos_index, reset_positions=True)
@@ -639,7 +640,7 @@ class Trainer(object):
 
         if lang2 is not None:
             # vTLM
-            _, (boxes, feats, labels), (x1, len1), (x2, len2) = self.get_batch_vpara(name, lang1, lang2)
+            (x1, len1), (x2, len2), (boxes, feats, labels), _ = self.get_batch_vpara(name, lang1, lang2)
             x, lengths, positions, langs = concat_batches(
                 x1, len1, lang1_id, x2, len2, lang2_id, params.pad_index,
                 params.eos_index, reset_positions=True)
@@ -1087,7 +1088,7 @@ class EncDecTrainer(Trainer):
         lang1_id = params.lang2id[lang1]
         lang2_id = params.lang2id[lang2]
 
-        _, (x1, len1), (x2, len2) = self.get_batch('mt', lang1, lang2)
+        (x1, len1), (x2, len2), _ = self.get_batch('mt', lang1, lang2)
         langs1 = x1.clone().fill_(lang1_id)
         langs2 = x2.clone().fill_(lang2_id)
 
@@ -1136,7 +1137,7 @@ class EncDecTrainer(Trainer):
         img_id = params.lang2id["img"]
 
         # generate batch
-        _, (img_boxes, img_feats, img_labels), (x1, len1), (x2, len2) = self.get_batch('mmt', lang1, lang2)
+        (x1, len1), (x2, len2), (img_boxes, img_feats, img_labels), _ = self.get_batch('mmt', lang1, lang2)
 
         langs1 = x1.clone().fill_(lang1_id)
         langs2 = x2.clone().fill_(lang2_id)
